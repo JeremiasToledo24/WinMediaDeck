@@ -5,12 +5,14 @@ Event Dispatcher, Hook, OSD, Tray, and Safe Shutdown.
 """
 
 import argparse
+import json
 import logging
 import os
 import queue
 import signal
 import sys
 import threading
+import time
 from typing import Optional
 
 # Ensure project root is on sys.path for direct execution
@@ -26,6 +28,7 @@ from src.config.settings import (
     ConfigurationError,
     Settings,
     get_config_path,
+    write_config_atomic,
 )
 from src.config.watcher import ConfigWatcher
 from src.core.action_router import ActionRouter
@@ -39,9 +42,15 @@ from src.platform.windows.mutex import (
     release_mutex,
     AlreadyRunningError,
     MutexError,
+    create_quit_event,
+    signal_quit_event,
+    wait_quit_event,
+    close_event,
 )
-from src.ui.osd import OSDService
+from src import __version__
+from src.ui.osd import OSDService, _set_dpi_awareness
 from src.ui.tray_app import TrayApp
+from src.ui.settings_window import SettingsWindow
 
 logger = logging.getLogger("WinMediaDeck")
 
@@ -62,6 +71,8 @@ class LifecycleManager:
 
         # Components (initialized during startup)
         self._mutex_handle: Optional[int] = None
+        self._quit_event: Optional[int] = None
+        self._quit_thread: Optional[threading.Thread] = None
         self._config_manager: Optional[ConfigManager] = None
         self._config_watcher: Optional[ConfigWatcher] = None
         self._action_router: Optional[ActionRouter] = None
@@ -98,6 +109,17 @@ class LifecycleManager:
         """Get current state (callable reference for HotkeyManager)."""
         return self.state
 
+    def _quit_listener_main(self) -> None:
+        """Background listener that monitors the named quit event."""
+        while not self._main_stop.is_set():
+            try:
+                if self._quit_event and wait_quit_event(self._quit_event, timeout_ms=500):
+                    logger.info("Quit event signaled from external process. Shutting down...")
+                    self.shutdown()
+                    break
+            except Exception:
+                break
+
     def run(self) -> int:
         """Run the full application lifecycle.
 
@@ -129,6 +151,19 @@ class LifecycleManager:
         except MutexError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
+
+        # Start quit event IPC listener
+        try:
+            self._quit_event = create_quit_event()
+            if self._quit_event:
+                self._quit_thread = threading.Thread(
+                    target=self._quit_listener_main,
+                    name="WinMediaDeck-QuitListener",
+                    daemon=True,
+                )
+                self._quit_thread.start()
+        except Exception as e:
+            logger.debug("Could not start quit event listener: %s", e)
 
         self._set_state(AppState.VALIDATING)
 
@@ -168,7 +203,15 @@ class LifecycleManager:
         else:
             self._set_state(AppState.PAUSED)
 
-        # 6. Block main thread until shutdown
+        # 6. Show startup notification
+        if self._tray_app:
+            time.sleep(0.5)  # Brief delay to ensure tray icon is visible
+            self._tray_app.notify(
+                "WinMediaDeck activo",
+                "Hotkeys de medios habilitados. Click derecho en el icono para ajustes.",
+            )
+
+        # 7. Block main thread until shutdown
         self._start_console_listener()
         logger.info("WinMediaDeck is active. Press 'q' + Enter or Ctrl+C to exit.")
         try:
@@ -194,6 +237,7 @@ class LifecycleManager:
         if settings.osd.enabled:
             self._osd_service = OSDService(
                 duration_ms=settings.osd.duration_ms,
+                theme=settings.theme,
             )
 
         # Autostart
@@ -203,13 +247,17 @@ class LifecycleManager:
         self._tray_app = TrayApp(
             on_toggle_pause=self._toggle_pause,
             on_toggle_autostart=self._toggle_autostart,
+            on_toggle_theme=self._toggle_theme,
             on_quit=self._request_quit,
             on_open_config=self._open_config,
+            on_open_settings=self._open_settings,
             on_diagnostic=self._run_diagnostic,
             get_autostart_state=(
                 lambda: self._autostart_manager.is_enabled()
                 if self._autostart_manager else False
             ),
+            get_theme_state=self._get_theme_state,
+            on_about=self._open_about,
         )
 
         # Hotkey manager
@@ -322,6 +370,28 @@ class LifecycleManager:
             enabled = self._autostart_manager.toggle()
             logger.info("Autostart %s", "enabled" if enabled else "disabled")
 
+    def _toggle_theme(self) -> None:
+        """Toggle between dark and light themes."""
+        if not self._config_manager:
+            return
+        current_settings = self._config_manager.settings
+        new_theme = "light" if current_settings.theme == "dark" else "dark"
+        config_path = self._config_manager.config_path
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data["theme"] = new_theme
+            write_config_atomic(data, config_path)
+            logger.info("Theme toggled to %s", new_theme)
+        except Exception:
+            logger.exception("Failed to toggle theme")
+
+    def _get_theme_state(self) -> str:
+        """Get current visual theme ('dark' or 'light')."""
+        if self._config_manager:
+            return self._config_manager.settings.theme
+        return "dark"
+
     def _on_config_changed(self) -> None:
         """Handle config file changes (hot-reload)."""
         if not self._config_manager:
@@ -349,6 +419,7 @@ class LifecycleManager:
         # Update OSD settings
         if self._osd_service:
             self._osd_service.update_duration(new_settings.osd.duration_ms)
+            self._osd_service.update_theme(new_settings.theme)
 
         logger.info("Configuration reloaded successfully")
 
@@ -382,6 +453,21 @@ class LifecycleManager:
             print(format_report(report))
         except Exception:
             logger.exception("Diagnostic failed")
+
+    def _open_settings(self) -> None:
+        """Open the settings window."""
+        try:
+            SettingsWindow.open(config_path=get_config_path())
+        except Exception:
+            logger.exception("Failed to open settings window")
+
+    def _open_about(self) -> None:
+        """Open the discrete About dialog."""
+        try:
+            current_theme = self._get_theme_state()
+            SettingsWindow.show_about(parent=None, theme_name=current_theme)
+        except Exception:
+            logger.exception("Failed to open about dialog")
 
     def _start_console_listener(self) -> None:
         """Start a daemon thread that listens for console commands to exit."""
@@ -420,14 +506,14 @@ class LifecycleManager:
     def shutdown(self) -> None:
         """Perform a full, ordered, idempotent shutdown.
 
-        1. Disable new event processing
-        2. Unhook the keyboard
-        3. Clear pressed keys
-        4. Stop event dispatcher
-        5. Stop config watcher
-        6. Close OSD
-        7. Destroy tray icon
-        8. Release mutex
+        1. Close any open settings GUI
+        2. Stop event dispatcher
+        3. Unhook keyboard and stop hotkey manager
+        4. Stop config watcher
+        5. Close OSD
+        6. Destroy tray icon
+        7. Close IPC quit event
+        8. Release single-instance mutex
         """
         with self._shutdown_lock:
             if self._is_stopped:
@@ -437,41 +523,73 @@ class LifecycleManager:
         self._set_state(AppState.STOPPING)
         logger.info("Shutting down...")
 
+        # Close any open settings window
+        try:
+            SettingsWindow.close()
+        except Exception:
+            pass
+
         # 1. Stop event dispatcher
-        self._dispatcher_stop.set()
-        if self._dispatcher_thread:
-            self._dispatcher_thread.join(timeout=3.0)
-            self._dispatcher_thread = None
+        try:
+            self._dispatcher_stop.set()
+            if self._dispatcher_thread:
+                self._dispatcher_thread.join(timeout=2.0)
+                self._dispatcher_thread = None
+        except Exception:
+            logger.exception("Error stopping event dispatcher")
 
         # 2. Stop hotkey manager (unhooks + stops message pump)
-        if self._hotkey_manager:
-            self._hotkey_manager.stop()
-            self._hotkey_manager = None
+        try:
+            if self._hotkey_manager:
+                self._hotkey_manager.stop()
+                self._hotkey_manager = None
+        except Exception:
+            logger.exception("Error stopping hotkey manager")
 
         # 3. Stop config watcher
-        if self._config_watcher:
-            self._config_watcher.stop()
-            self._config_watcher = None
+        try:
+            if self._config_watcher:
+                self._config_watcher.stop()
+                self._config_watcher = None
+        except Exception:
+            logger.exception("Error stopping config watcher")
 
         # 4. Stop OSD
-        if self._osd_service:
-            self._osd_service.shutdown()
-            self._osd_service = None
+        try:
+            if self._osd_service:
+                self._osd_service.shutdown()
+                self._osd_service = None
+        except Exception:
+            logger.exception("Error stopping OSD service")
 
         # 5. Stop tray
-        if self._tray_app:
-            self._tray_app.shutdown()
-            self._tray_app = None
+        try:
+            if self._tray_app:
+                self._tray_app.shutdown()
+                self._tray_app = None
+        except Exception:
+            logger.exception("Error stopping tray application")
 
-        # 6. Release mutex
-        if self._mutex_handle:
-            release_mutex(self._mutex_handle)
-            self._mutex_handle = None
+        # 6. Close IPC quit event
+        try:
+            if self._quit_event:
+                close_event(self._quit_event)
+                self._quit_event = None
+        except Exception:
+            pass
+
+        # 7. Release mutex (guaranteed to be reached)
+        try:
+            if self._mutex_handle:
+                release_mutex(self._mutex_handle)
+                self._mutex_handle = None
+        except Exception:
+            logger.exception("Error releasing mutex")
 
         self._set_state(AppState.STOPPED)
         logger.info("Shutdown complete")
 
-        # Unblock main thread
+        # Unblock main thread - guaranteed
         self._main_stop.set()
 
     def _signal_handler(self, signum, frame) -> None:
@@ -518,6 +636,12 @@ def _parse_args() -> argparse.Namespace:
         help="Enable debug output to stderr (no disk logs).",
     )
     parser.add_argument(
+        "--quit",
+        "-q",
+        action="store_true",
+        help="Cierra completamente cualquier instancia de WinMediaDeck en ejecucion y sale.",
+    )
+    parser.add_argument(
         "--diagnostic",
         action="store_true",
         help="Run a system compatibility diagnostic and exit.",
@@ -525,13 +649,16 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--version",
         action="version",
-        version="WinMediaDeck 1.4.0",
+        version=f"WinMediaDeck {__version__}",
     )
     return parser.parse_args()
 
 
 def main() -> int:
     """Main entry point."""
+    # Ensure Per-Monitor V2 DPI awareness early at startup
+    _set_dpi_awareness()
+
     # Attach to parent console if invoked from terminal (CLI flags)
     if sys.platform == "win32":
         try:
@@ -555,6 +682,16 @@ def main() -> int:
     args = _parse_args()
     _setup_logging(debug=args.debug)
 
+    if args.quit:
+        if signal_quit_event():
+            print("Señal de cierre enviada a WinMediaDeck.")
+            time.sleep(1.0)
+            print("WinMediaDeck se ha cerrado completamente.")
+            return 0
+        else:
+            print("WinMediaDeck no está en ejecución.", file=sys.stderr)
+            return 1
+
     if args.diagnostic:
         try:
             system_info = detect_system()
@@ -566,7 +703,11 @@ def main() -> int:
             return 1
 
     lifecycle = LifecycleManager(debug=args.debug)
-    return lifecycle.run()
+    exit_code = lifecycle.run()
+    try:
+        os._exit(exit_code)
+    except Exception:
+        return exit_code
 
 
 if __name__ == "__main__":

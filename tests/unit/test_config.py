@@ -146,6 +146,32 @@ class TestParseConfig:
         })
         assert settings.enabled is False
 
+    def test_theme_parsing_valid(self):
+        """Theme parses 'dark' and 'light' case-insensitively."""
+        s_dark = parse_config({"schema_version": 1, "theme": "dark"})
+        assert s_dark.theme == "dark"
+
+        s_light = parse_config({"schema_version": 1, "theme": "light"})
+        assert s_light.theme == "light"
+
+        s_upper = parse_config({"schema_version": 1, "theme": "LIGHT"})
+        assert s_upper.theme == "light"
+
+    def test_theme_default_is_dark(self):
+        """When theme is omitted, default is 'dark'."""
+        settings = parse_config({"schema_version": 1})
+        assert settings.theme == "dark"
+
+    def test_invalid_theme_rejected(self):
+        """Invalid theme values raise ConfigurationError."""
+        with pytest.raises(ConfigurationError, match="Invalid theme"):
+            parse_config({"schema_version": 1, "theme": "neon"})
+
+    def test_non_string_theme_rejected(self):
+        """Non-string theme raises ConfigurationError."""
+        with pytest.raises(ConfigurationError, match="must be a string"):
+            parse_config({"schema_version": 1, "theme": 123})
+
 
 class TestAtomicWrite:
     """Tests for write_config_atomic()."""

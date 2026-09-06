@@ -55,11 +55,13 @@ class Settings:
     Attributes:
         schema_version: The schema version of this configuration.
         enabled: If True, the app starts in RUNNING; if False, PAUSED.
+        theme: Application visual theme ('dark' or 'light').
         osd: OSD display settings.
         hotkeys: Mapping of F-key names to Action enum members.
     """
     schema_version: int = SCHEMA_VERSION
     enabled: bool = True
+    theme: str = "dark"
     osd: OSDSettings = field(default_factory=OSDSettings)
     hotkeys: dict[str, Action] = field(default_factory=dict)
 
@@ -90,6 +92,7 @@ def _default_config_dict() -> dict:
     return {
         "schema_version": SCHEMA_VERSION,
         "enabled": True,
+        "theme": "dark",
         "osd": {
             "enabled": True,
             "duration_ms": 1000,
@@ -248,9 +251,22 @@ def parse_config(data: dict) -> Settings:
 
         hotkeys[key_name] = action
 
+    # --- theme ---
+    theme = data.get("theme", "dark")
+    if not isinstance(theme, str):
+        raise ConfigurationError(
+            f"'theme' must be a string, got {type(theme).__name__}"
+        )
+    if theme.lower() not in ("dark", "light"):
+        raise ConfigurationError(
+            f"Invalid theme '{theme}'. Must be either 'dark' or 'light'"
+        )
+    theme = theme.lower()
+
     return Settings(
         schema_version=version,
         enabled=enabled,
+        theme=theme,
         osd=OSDSettings(enabled=osd_enabled, duration_ms=osd_duration),
         hotkeys=hotkeys,
     )

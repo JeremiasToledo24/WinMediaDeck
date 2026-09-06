@@ -56,12 +56,12 @@ _ACTION_DISPLAY: dict[Action, tuple[str, str]] = {
     Action.TOGGLE_PAUSE: ("⏸", "Pausa App"),
 }
 
-# OSD visual constants
+# OSD visual constants (harmonized with landing_v3.html and SettingsWindow)
 _OSD_WIDTH = 280
 _OSD_HEIGHT = 80
-_OSD_BG = "#1a1a2e"
-_OSD_FG = "#e0e0e0"
-_OSD_ACCENT = "#0f3460"
+_OSD_BG = "#1b1b18"        # --ink from landing_v3.html
+_OSD_FG = "#f2f1ed"        # --panel from landing_v3.html
+_OSD_ACCENT = "#4e8f6b"    # --active tint from landing_v3.html
 _OSD_ICON_SIZE = 28
 _OSD_FONT_FAMILY = "Segoe UI"
 _OSD_CORNER_RADIUS = 16
@@ -73,7 +73,11 @@ def _set_dpi_awareness() -> None:
     """Set DPI awareness to Per-Monitor V2 if available."""
     try:
         # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
-        ctypes.windll.user32.SetProcessDpiAwarenessContext(-4)
+        u32 = ctypes.windll.user32
+        u32.SetProcessDpiAwarenessContext.argtypes = [ctypes.c_void_p]
+        u32.SetProcessDpiAwarenessContext.restype = ctypes.c_bool
+        if not u32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)):
+            raise OSError("SetProcessDpiAwarenessContext returned False")
         logger.debug("DPI awareness set to Per-Monitor V2")
     except (OSError, AttributeError):
         try:
@@ -91,15 +95,18 @@ class OSDService(IOSDService):
     operations are dispatched via Tkinter's thread-safe after() method.
     """
 
-    def __init__(self, duration_ms: int = 1000):
+    def __init__(self, duration_ms: int = 1000, theme: str = "dark"):
         """
         Args:
             duration_ms: How long the OSD remains visible (milliseconds).
+            theme: Initial visual theme ('dark' or 'light').
         """
         self._duration_ms = duration_ms
+        self._theme = theme.lower()
         self._osd_queue: queue.Queue[Optional[Action]] = queue.Queue()
         self._thread: Optional[threading.Thread] = None
         self._root: Optional[tk.Tk] = None
+        self._content_frame: Optional[tk.Frame] = None
         self._label_icon: Optional[tk.Label] = None
         self._label_text: Optional[tk.Label] = None
         self._canvas: Optional[tk.Canvas] = None
@@ -123,6 +130,31 @@ class OSDService(IOSDService):
         self._thread.start()
         self._started = True
 
+    def update_theme(self, theme: str) -> None:
+        """Update OSD theme dynamically ('dark' or 'light')."""
+        self._theme = theme.lower() if theme.lower() in ("light", "dark") else "dark"
+        if self._root:
+            try:
+                self._root.after(0, self._apply_theme)
+            except Exception:
+                pass
+
+    def _apply_theme(self) -> None:
+        """Apply current theme to OSD widgets using landing_v3.html tokens."""
+        if not self._root:
+            return
+        is_light = self._theme == "light"
+        bg = "#f2f1ed" if is_light else "#1b1b18"       # --panel vs --ink
+        fg = "#1b1b18" if is_light else "#f2f1ed"       # --ink vs --panel
+        accent = "#3c6e52" if is_light else "#4e8f6b"   # --active vs bright active
+        self._root.configure(bg=bg)
+        if self._content_frame:
+            self._content_frame.configure(bg=bg)
+        if self._label_icon:
+            self._label_icon.configure(bg=bg, fg=accent)
+        if self._label_text:
+            self._label_text.configure(bg=bg, fg=fg)
+
     def _osd_main(self) -> None:
         """Main function for the OSD thread."""
         try:
@@ -131,7 +163,6 @@ class OSDService(IOSDService):
             self._root.overrideredirect(True)
             self._root.attributes("-topmost", True)
             self._root.attributes("-alpha", 0.92)
-            self._root.configure(bg=_OSD_BG)
 
             # Set window style (non-activatable)
             self._root.update_idletasks()
@@ -144,28 +175,27 @@ class OSDService(IOSDService):
             user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style)
 
             # Create the OSD layout
-            frame = tk.Frame(self._root, bg=_OSD_BG, padx=_OSD_PADDING, pady=12)
-            frame.pack(fill="both", expand=True)
+            self._content_frame = tk.Frame(self._root, padx=_OSD_PADDING, pady=12)
+            self._content_frame.pack(fill="both", expand=True)
 
             self._label_icon = tk.Label(
-                frame,
+                self._content_frame,
                 text="",
                 font=(_OSD_FONT_FAMILY, _OSD_ICON_SIZE),
-                bg=_OSD_BG,
-                fg=_OSD_FG,
                 anchor="w",
             )
             self._label_icon.pack(side="left", padx=(0, 12))
 
             self._label_text = tk.Label(
-                frame,
+                self._content_frame,
                 text="",
                 font=(_OSD_FONT_FAMILY, 14, "bold"),
-                bg=_OSD_BG,
-                fg=_OSD_FG,
                 anchor="w",
             )
             self._label_text.pack(side="left", fill="x", expand=True)
+
+            # Apply initial theme
+            self._apply_theme()
 
             # Poll the queue periodically
             self._poll_queue()

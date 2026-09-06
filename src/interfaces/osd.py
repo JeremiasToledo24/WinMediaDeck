@@ -34,3 +34,7 @@ class IOSDService(ABC):
         Must be idempotent — safe to call multiple times.
         """
         ...
+
+    def update_theme(self, theme: str) -> None:
+        """Update visual theme ('dark' or 'light')."""
+        pass

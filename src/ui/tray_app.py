@@ -19,18 +19,18 @@ logger = logging.getLogger(__name__)
 # Icon dimensions
 _ICON_SIZE = 64
 
-# Colors for each state
+# Colors for each state — Exact color tokens from landing_v3.html
 _STATE_COLORS: dict[AppState, tuple[str, str]] = {
-    # (fill_color, accent_color)
-    AppState.RUNNING: ("#00c853", "#1b5e20"),    # Green
-    AppState.PAUSED: ("#9e9e9e", "#616161"),       # Grey
-    AppState.BLOCKED: ("#ff9800", "#e65100"),       # Orange/Warning
-    AppState.FAILED: ("#f44336", "#b71c1c"),        # Red/Error
-    AppState.STARTING: ("#2196f3", "#0d47a1"),     # Blue
-    AppState.VALIDATING: ("#2196f3", "#0d47a1"),   # Blue
-    AppState.READY: ("#2196f3", "#0d47a1"),        # Blue
-    AppState.STOPPING: ("#9e9e9e", "#616161"),     # Grey
-    AppState.STOPPED: ("#9e9e9e", "#616161"),      # Grey
+    # (symbol_fill, tile_accent)
+    AppState.RUNNING: ("#ffffff", "#3c6e52"),     # --active (#3c6e52) forest green
+    AppState.PAUSED: ("#ffffff", "#9a7b1f"),      # --paused (#9a7b1f) warm amber
+    AppState.BLOCKED: ("#ffffff", "#a13d3d"),     # --blocked (#a13d3d) brick red
+    AppState.FAILED: ("#ffffff", "#7a7a72"),      # error dot (#7a7a72) slate grey
+    AppState.STARTING: ("#ffffff", "#1c5c8a"),    # --link (#1c5c8a) classic blue
+    AppState.VALIDATING: ("#ffffff", "#1c5c8a"),  # --link (#1c5c8a) classic blue
+    AppState.READY: ("#ffffff", "#1c5c8a"),       # --link (#1c5c8a) classic blue
+    AppState.STOPPING: ("#ffffff", "#7a7a72"),    # slate grey
+    AppState.STOPPED: ("#ffffff", "#7a7a72"),     # slate grey
 }
 
 
@@ -119,8 +119,12 @@ class TrayApp:
         on_toggle_autostart: Optional[Callable[[], None]] = None,
         on_quit: Optional[Callable[[], None]] = None,
         on_open_config: Optional[Callable[[], None]] = None,
+        on_open_settings: Optional[Callable[[], None]] = None,
         on_diagnostic: Optional[Callable[[], None]] = None,
         get_autostart_state: Optional[Callable[[], bool]] = None,
+        on_toggle_theme: Optional[Callable[[], None]] = None,
+        get_theme_state: Optional[Callable[[], str]] = None,
+        on_about: Optional[Callable[[], None]] = None,
     ):
         """
         Args:
@@ -128,15 +132,23 @@ class TrayApp:
             on_toggle_autostart: Callback for autostart toggle.
             on_quit: Callback for quit action.
             on_open_config: Callback to open config file in editor.
+            on_open_settings: Callback to open the settings window.
             on_diagnostic: Callback to run diagnostic.
             get_autostart_state: Callable returning current autostart state.
+            on_toggle_theme: Callback for theme toggle (dark/light).
+            get_theme_state: Callable returning current theme ('dark' or 'light').
+            on_about: Callback to open the About dialog.
         """
         self._on_toggle_pause = on_toggle_pause
         self._on_toggle_autostart = on_toggle_autostart
         self._on_quit = on_quit
         self._on_open_config = on_open_config
+        self._on_open_settings = on_open_settings
         self._on_diagnostic = on_diagnostic
         self._get_autostart_state = get_autostart_state
+        self._on_toggle_theme = on_toggle_theme
+        self._get_theme_state = get_theme_state
+        self._on_about = on_about
 
         self._icon = None
         self._thread: Optional[threading.Thread] = None
@@ -185,6 +197,12 @@ class TrayApp:
 
             menu_items.append(pystray.Menu.SEPARATOR)
 
+            # Settings window
+            if self._on_open_settings:
+                menu_items.append(
+                    pystray.MenuItem("⚙ Ajustes", self._handle_open_settings)
+                )
+
             # Open config
             if self._on_open_config:
                 menu_items.append(
@@ -204,10 +222,29 @@ class TrayApp:
                     )
                 )
 
+            # Toggle theme
+            if self._on_toggle_theme:
+                menu_items.append(
+                    pystray.MenuItem(
+                        lambda item: (
+                            "☀️ Tema claro"
+                            if self._get_theme_state and self._get_theme_state() == "dark"
+                            else "🌙 Tema oscuro"
+                        ),
+                        self._handle_toggle_theme,
+                    )
+                )
+
             # Diagnostic
             if self._on_diagnostic:
                 menu_items.append(
                     pystray.MenuItem("🔍 Diagnóstico", self._handle_diagnostic)
+                )
+
+            # About dialog (al último en la lista de opciones)
+            if self._on_about:
+                menu_items.append(
+                    pystray.MenuItem("ℹ Acerca de", self._handle_about)
                 )
 
             menu_items.append(pystray.Menu.SEPARATOR)
@@ -241,11 +278,27 @@ class TrayApp:
         if self._on_toggle_autostart:
             self._on_toggle_autostart()
 
+    def _handle_toggle_theme(self, icon, item) -> None:
+        if self._on_toggle_theme:
+            threading.Thread(
+                target=self._on_toggle_theme,
+                name="WinMediaDeck-ToggleThemeWorker",
+                daemon=True,
+            ).start()
+
     def _handle_quit(self, icon, item) -> None:
         if self._icon:
-            self._icon.stop()
+            try:
+                self._icon.stop()
+            except Exception:
+                pass
         if self._on_quit:
-            self._on_quit()
+            # Execute on_quit in a separate daemon thread to avoid joining/deadlocking the tray thread
+            threading.Thread(
+                target=self._on_quit,
+                name="WinMediaDeck-QuitWorker",
+                daemon=True,
+            ).start()
 
     def _handle_open_config(self, icon, item) -> None:
         if self._on_open_config:
@@ -254,6 +307,31 @@ class TrayApp:
     def _handle_diagnostic(self, icon, item) -> None:
         if self._on_diagnostic:
             self._on_diagnostic()
+
+    def _handle_open_settings(self, icon, item) -> None:
+        if self._on_open_settings:
+            self._on_open_settings()
+
+    def _handle_about(self, icon=None, item=None) -> None:
+        if self._on_about:
+            threading.Thread(
+                target=self._on_about,
+                name="WinMediaDeck-AboutWorker",
+                daemon=True,
+            ).start()
+
+    def notify(self, title: str, message: str) -> None:
+        """Show a native Windows balloon notification.
+
+        Args:
+            title: Notification title.
+            message: Notification body text.
+        """
+        if self._icon:
+            try:
+                self._icon.notify(message, title)
+            except Exception:
+                logger.exception("Failed to show balloon notification")
 
     def update_state(self, state: AppState) -> None:
         """Update the tray icon to reflect a new app state.
@@ -283,9 +361,13 @@ class TrayApp:
             except Exception:
                 pass
 
-        if self._thread:
-            self._thread.join(timeout=3.0)
-            self._thread = None
+        # Never join the current thread (raises RuntimeError and deadlocks)
+        if self._thread and threading.current_thread() != self._thread:
+            try:
+                self._thread.join(timeout=3.0)
+            except Exception:
+                pass
+        self._thread = None
 
         self._started = False
         logger.info("Tray application stopped")

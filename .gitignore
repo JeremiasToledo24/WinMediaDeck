@@ -38,8 +38,9 @@ htmlcov/
 Thumbs.db
 desktop.ini
 
-# IDEs
+# IDEs and Agent Configs
 .vscode/
 .idea/
 *.swp
 *.swo
+.agents/
