@@ -525,13 +525,21 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--version",
         action="version",
-        version="WinMediaDeck 1.0.0",
+        version="WinMediaDeck 1.4.0",
     )
     return parser.parse_args()
 
 
 def main() -> int:
     """Main entry point."""
+    # Attach to parent console if invoked from terminal (CLI flags)
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.kernel32.AttachConsole(-1)
+        except Exception:
+            pass
+
     # Ensure UTF-8 output in Windows console
     if sys.stdout and hasattr(sys.stdout, "reconfigure"):
         try:
