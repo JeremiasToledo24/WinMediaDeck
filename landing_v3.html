@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WinMediaDeck — F1-F12 remapper for Windows</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --panel: #f2f1ed;
+      --ink: #1b1b18;
+      --ink-soft: #55534c;
+      --line: #d7d4c9;
+      --line-strong: #b6b2a3;
+      --active: #3c6e52;
+      /* tray: active */
+      --paused: #9a7b1f;
+      /* tray: paused */
+      --blocked: #a13d3d;
+      /* tray: blocked */
+      --link: #1c5c8a;
+      --mono: "IBM Plex Mono", "Consolas", "Lucida Console", monospace;
+      --sans: "Segoe UI", "Tahoma", Verdana, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    a {
+      color: var(--link);
+    }
+
+    a:visited {
+      color: #5b3a86;
+    }
+
+    a:focus-visible,
+    button:focus-visible {
+      outline: 2px solid var(--active);
+      outline-offset: 2px;
+    }
+
+    /* ---- top strip ---- */
+    .topstrip {
+      background: var(--ink);
+      color: #e9e7df;
+      font-size: 12px;
+      padding: 4px 0;
+    }
+
+    .topstrip .wrap {
+      display: flex;
+      justify-content: space-between;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    .topstrip a {
+      color: #cfe0d6;
+      text-decoration: none;
+    }
+
+    .topstrip a:hover {
+      text-decoration: underline;
+    }
+
+    /* ---- header / nav ---- */
+    header {
+      border-bottom: 1px solid var(--line-strong);
+    }
+
+    .headwrap {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 14px 16px 0 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo {
+      width: 30px;
+      height: 30px;
+      flex: none;
+      background: var(--ink);
+      position: relative;
+    }
+
+    .logo::after {
+      content: "";
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      width: 14px;
+      height: 14px;
+      background: var(--active);
+    }
+
+    .brand h1 {
+      font-size: 19px;
+      margin: 0;
+      letter-spacing: .2px;
+    }
+
+    .brand .tag {
+      color: var(--ink-soft);
+      font-size: 12.5px;
+      margin-top: 1px;
+    }
+
+    nav.tabs {
+      margin-top: 12px;
+    }
+
+    nav.tabs ul {
+      list-style: none;
+      display: flex;
+      gap: 0;
+      margin: 0;
+      padding: 0;
+      flex-wrap: wrap;
+    }
+
+    nav.tabs li {
+      border: 1px solid var(--line-strong);
+      border-bottom: none;
+      margin-right: 4px;
+    }
+
+    nav.tabs a {
+      display: block;
+      padding: 7px 14px;
+      text-decoration: none;
+      color: var(--ink);
+      font-size: 13px;
+      background: var(--panel);
+    }
+
+    nav.tabs li.current a {
+      background: var(--bg);
+      font-weight: 600;
+    }
+
+    nav.tabs::after {
+      content: "";
+      display: block;
+      border-bottom: 1px solid var(--line-strong);
+      margin-top: -1px;
+    }
+
+    /* ---- layout ---- */
+    .wrap900 {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    .layout {
+      display: flex;
+      gap: 28px;
+      padding: 22px 0 10px 0;
+      align-items: flex-start;
+    }
+
+    main {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    aside {
+      flex: 0 0 240px;
+    }
+
+    h2 {
+      font-size: 16px;
+      margin: 30px 0 8px 0;
+      padding-bottom: 5px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h2:first-of-type {
+      margin-top: 0;
+    }
+
+    h3 {
+      font-size: 13.5px;
+      margin: 16px 0 6px 0;
+      color: var(--ink);
+    }
+
+    p {
+      margin: 0 0 10px 0;
+    }
+
+    /* hero */
+    .hero-line {
+      font-size: 15.5px;
+      margin: 12px 0 16px 0;
+      max-width: 62ch;
+    }
+
+    .cta-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 6px;
+      flex-wrap: wrap;
+    }
+
+    .btn-download {
+      display: inline-block;
+      background: var(--active);
+      color: #fff;
+      text-decoration: none;
+      padding: 9px 18px;
+      font-size: 13.5px;
+      font-weight: 600;
+      border: 1px solid #2c5540;
+    }
+
+    .btn-download:hover {
+      background: #335e46;
+    }
+
+    .cta-meta {
+      font-size: 12px;
+      color: var(--ink-soft);
+    }
+
+    /* status dots legend, echoes tray states */
+    .statuslegend {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--ink-soft);
+      margin: 14px 0 4px 0;
+      flex-wrap: wrap;
+    }
+
+    .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      margin-right: 5px;
+      border-radius: 50%;
+    }
+
+    .dot.active {
+      background: var(--active);
+    }
+
+    .dot.paused {
+      background: var(--paused);
+    }
+
+    .dot.blocked {
+      background: var(--blocked);
+    }
+
+    .dot.error {
+      background: #7a7a72;
+    }
+
+    /* sidebar box */
+    .box {
+      border: 1px solid var(--line-strong);
+      background: var(--panel);
+      padding: 12px 14px;
+      margin-bottom: 16px;
+    }
+
+    .box h3 {
+      margin-top: 0;
+      font-size: 12.5px;
+      text-transform: none;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 6px;
+    }
+
+    .box dl {
+      margin: 0;
+      font-size: 12.5px;
+    }
+
+    .box dt {
+      color: var(--ink-soft);
+      float: left;
+      width: 38%;
+      clear: left;
+    }
+
+    .box dd {
+      margin: 0 0 6px 40%;
+    }
+
+    .box dl::after {
+      content: "";
+      display: block;
+      clear: both;
+    }
+
+    /* feature list, definition style not cards */
+    .featlist {
+      margin: 0;
+      padding: 0;
+    }
+
+    .featlist .row {
+      display: flex;
+      gap: 14px;
+      padding: 9px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .featlist .row:first-child {
+      border-top: none;
+    }
+
+    .featlist .name {
+      flex: 0 0 190px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .featlist .desc {
+      flex: 1;
+      color: var(--ink-soft);
+      font-size: 13px;
+    }
+
+    /* tables */
+    table.spec {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 13px;
+      margin: 10px 0 4px 0;
+    }
+
+    table.spec th,
+    table.spec td {
+      border: 1px solid var(--line);
+      padding: 6px 9px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    table.spec th {
+      background: var(--panel);
+      font-weight: 600;
+      width: 34%;
+    }
+
+    table.spec code {
+      font-size: 12px;
+    }
+
+    /* code blocks */
+    pre {
+      background: #1c1c1a;
+      color: #e6e4d8;
+      padding: 12px 14px;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 12.3px;
+      border: 1px solid #000;
+      line-height: 1.5;
+    }
+
+    code {
+      font-family: var(--mono);
+      font-size: 12.3px;
+      background: var(--panel);
+      padding: 1px 4px;
+      border: 1px solid var(--line);
+    }
+
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    /* action badges — icon + label, matches app's own on-brand button style */
+    .actiongrid {
+      background: #1b1b2d;
+      border: 1px solid #2f2f47;
+      padding: 20px 18px;
+      margin: 16px 0 26px 0;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px 20px;
+    }
+
+    .abtn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: 14px;
+      color: #a9c4f0;
+      letter-spacing: .1px;
+    }
+
+    .aicon {
+      flex: none;
+      width: 38px;
+      height: 38px;
+      border: 1.6px solid #7fa3e0;
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #9db8ea;
+    }
+
+    .aicon svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+    }
+
+    /* not-a-list list for "does not do" */
+    .nolist {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      font-size: 13px;
+    }
+
+    .nolist li {
+      padding: 4px 0 4px 20px;
+      position: relative;
+      color: var(--ink-soft);
+    }
+
+    .nolist li::before {
+      content: "–";
+      position: absolute;
+      left: 0;
+      color: var(--blocked);
+      font-weight: 700;
+    }
+
+    .architree {
+      font-family: var(--mono);
+      font-size: 12.3px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .note {
+      border-left: 3px solid var(--paused);
+      background: var(--panel);
+      padding: 8px 12px;
+      font-size: 12.5px;
+      color: var(--ink-soft);
+      margin: 14px 0;
+    }
+
+    footer {
+      border-top: 1px solid var(--line-strong);
+      margin-top: 34px;
+      padding: 18px 0 30px 0;
+      font-size: 12px;
+      color: var(--ink-soft);
+    }
+
+    footer .wrap900 {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    @media (max-width:760px) {
+      .layout {
+        flex-direction: column;
+      }
+
+      aside {
+        width: 100%;
+      }
+
+      .featlist .row {
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .featlist .name {
+        flex: none;
+      }
+
+      .box dt {
+        width: 44%;
+      }
+
+      .box dd {
+        margin-left: 46%;
+      }
+
+      .actiongrid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="topstrip">
+    <div class="wrap">
+      <span>WinMediaDeck 1.4.0 · Windows 10/11</span>
+      <a href="https://github.com/JeremiasToledo24/WinMediaDeck" target="_blank" rel="noopener">github.com/JeremiasToledo24/WinMediaDeck</a>
+    </div>
+  </div>
+
+  <header>
+    <div class="headwrap">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <div>
+          <h1>WinMediaDeck</h1>
+          <div class="tag">F1–F12, put back to work.</div>
+        </div>
+      </div>
+      <nav class="tabs">
+        <ul>
+          <li class="current"><a href="#top">Overview</a></li>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#config">Configuration</a></li>
+          <li><a href="#security">Security model</a></li>
+          <li><a href="#hooks">About the hook</a></li>
+          <li><a href="#download">Download</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <div class="wrap900">
+    <div class="layout">
+
+      <main id="top">
+        <p class="hero-line">
+          WinMediaDeck sits in the tray and turns your F1–F12 row into media
+          keys, launchers, and shortcuts — one small Python process, one
+          config file, no background service and no cloud account.
+        </p>
+
+        <div class="cta-row">
+          <a class="btn-download" href="#download" id="download">Download for Windows</a>
+          <span class="cta-meta">MIT licensed · no admin rights required</span>
+        </div>
+        <div class="statuslegend">
+          <span><span class="dot active"></span>active</span>
+          <span><span class="dot paused"></span>paused</span>
+          <span><span class="dot blocked"></span>blocked</span>
+          <span><span class="dot error"></span>error</span>
+          <span>— tray icon states, at a glance</span>
+        </div>
+
+        <h2 id="features">What it remaps</h2>
+        <div class="featlist">
+          <div class="row">
+            <div class="name">Media controls</div>
+            <div class="desc">Volume up/down, mute, play/pause, next, previous, stop — sent straight to whatever's
+              playing.</div>
+          </div>
+          <div class="row">
+            <div class="name">System launchers</div>
+            <div class="desc">Open the calculator, your default browser, mail client, or the media selector, from a
+              single keypress.</div>
+          </div>
+          <div class="row">
+            <div class="name">On-screen display</div>
+            <div class="desc">A brief, semi-transparent HUD confirms the action fired. Multi-monitor and DPI aware.
+            </div>
+          </div>
+          <div class="row">
+            <div class="name">Hot-reload</div>
+            <div class="desc">Save <code>config.json</code> and the new mapping is live within 200ms. A broken config is
+              rejected, not applied.</div>
+          </div>
+          <div class="row">
+            <div class="name">Single instance</div>
+            <div class="desc">A session-scoped mutex keeps a second copy from ever running alongside the first.</div>
+          </div>
+          <div class="row">
+            <div class="name">Diagnostics</div>
+            <div class="desc"><code>--diagnostic</code> checks hook permissions, hotkey conflicts, and monitor setup
+              before you file a bug.</div>
+          </div>
+        </div>
+
+        <h2 id="config">Configuration</h2>
+        <p>Settings live at <code>%LOCALAPPDATA%\WinMediaDeck\config.json</code> and are created with sane defaults on
+          first run. Edit the file directly — there is no separate settings UI to keep in sync.</p>
+
+        <pre><code>{
+  "schema_version": 1,
+  "enabled": true,
+  "osd": { "enabled": true, "duration_ms": 1000 },
+  "hotkeys": {
+    "F1": "volume_down",   "F2": "volume_up",
+    "F3": "mute",          "F4": "previous",
+    "F5": "play_pause",    "F6": "next",
+    "F7": "stop",          "F8": "calculator",
+    "F9": "browser",       "F10": "media_select",
+    "F11": "mail",         "F12": "toggle_pause"
+  }
+}</code></pre>
+
+        <table class="spec">
+          <tr>
+            <th>Action</th>
+            <td>Effect</td>
+          </tr>
+          <tr>
+            <td><code>volume_down</code> / <code>volume_up</code></td>
+            <td>Step system volume down or up</td>
+          </tr>
+          <tr>
+            <td><code>mute</code></td>
+            <td>Toggle system mute</td>
+          </tr>
+          <tr>
+            <td><code>previous</code> / <code>next</code></td>
+            <td>Skip track backward or forward</td>
+          </tr>
+          <tr>
+            <td><code>play_pause</code> / <code>stop</code></td>
+            <td>Toggle playback, or stop it</td>
+          </tr>
+          <tr>
+            <td><code>calculator</code> / <code>browser</code> / <code>mail</code></td>
+            <td>Launch the respective default app</td>
+          </tr>
+          <tr>
+            <td><code>media_select</code></td>
+            <td>Open the OS media source selector</td>
+          </tr>
+          <tr>
+            <td><code>toggle_pause</code></td>
+            <td>Pause or resume WinMediaDeck itself</td>
+          </tr>
+        </table>
+
+        <div class="note">Config is validated against a strict schema on every reload. If validation fails, WinMediaDeck
+          keeps running on the last good configuration rather than falling back to an empty or partial one.</div>
+
+        <h2 id="security">Security model</h2>
+        <ul>
+          <li><strong>Closed action set.</strong> Only the actions listed above can ever run — no <code>eval()</code>,
+            no <code>exec()</code>, no shelling out to arbitrary commands.</li>
+          <li><strong>Strict schema validation.</strong> An invalid config is rejected outright; it is never
+            auto-corrected or partially applied.</li>
+          <li><strong>Scoped to F1–F12.</strong> The hook inspects only VK codes 0x70–0x7B. Every other key passes
+            through untouched and unread.</li>
+          <li><strong>Zero disk logs.</strong> <code>--debug</code> writes to stderr only; nothing is ever written to a
+            log file.</li>
+        </ul>
+
+        <h3>Where things live</h3>
+        <div class="architree">src/
+          ├── models/ data models — actions, events, states
+          ├── interfaces/ abstract contracts (IKeyboardHook, IMediaController, IOSDService)
+          ├── platform/windows/ Win32 ctypes isolation — keyboard, input, mutex, monitors, registry
+          ├── core/ action router, hotkey manager, media controller
+          ├── config/ settings + file-watcher
+          └── ui/ OSD overlay, system tray</div>
+
+        <h2 id="hooks">About the keyboard hook</h2>
+        <p>WinMediaDeck uses a Windows low-level keyboard hook (<code>WH_KEYBOARD_LL</code>) — the same mechanism
+          AutoHotkey and PowerToys use. Some antivirus engines flag any global hook by default; in this case, that flag
+          is a false positive.</p>
+        <p>The hook intercepts F1–F12 before the active application sees them and replaces them with media keys via
+          <code>SendInput</code>. There is no other way to remap keys system-wide on Windows.</p>
+        <h3>What the hook does not do</h3>
+        <ul class="nolist">
+          <li>Record any keystrokes outside F1–F12</li>
+          <li>Capture passwords or general text input</li>
+          <li>Read window titles or process names</li>
+          <li>Send any data over the network</li>
+          <li>Write logs to disk</li>
+        </ul>
+
+        <h2 id="download">Download</h2>
+        <table class="spec">
+          <tr>
+            <th>Requires</th>
+            <td>Windows 10 build 1809 or later; no administrator privileges</td>
+          </tr>
+          <tr>
+            <th>To build from source</th>
+            <td>Python 3.11+</td>
+          </tr>
+          <tr>
+            <th>License</th>
+            <td>MIT</td>
+          </tr>
+        </table>
+        <pre><code>git clone https://github.com/JeremiasToledo24/WinMediaDeck.git
+cd WinMediaDeck
+pip install -r requirements.txt
+python main.py</code></pre>
+        <p>Development build with tests: <code>pip install -r requirements-dev.txt &amp;&amp; pytest</code></p>
+      </main>
+
+      <aside>
+        <div class="box">
+          <h3>At a glance</h3>
+          <dl>
+            <dt>Version</dt>
+            <dd>1.4.0</dd>
+            <dt>Platform</dt>
+            <dd>Windows 10 / 11</dd>
+            <dt>Runtime</dt>
+            <dd>Python 3.11+</dd>
+            <dt>Admin rights</dt>
+            <dd>Not required</dd>
+            <dt>Network use</dt>
+            <dd>None</dd>
+            <dt>Disk logs</dt>
+            <dd>None</dd>
+            <dt>License</dt>
+            <dd>MIT</dd>
+          </dl>
+        </div>
+        <div class="box">
+          <h3>Command line</h3>
+          <dl>
+            <dt><code>main.py</code></dt>
+            <dd>Run in tray</dd>
+            <dt><code>--debug</code></dt>
+            <dd>stderr trace</dd>
+            <dt><code>--diagnostic</code></dt>
+            <dd>Compatibility check</dd>
+            <dt><code>--version</code></dt>
+            <dd>Print version</dd>
+          </dl>
+        </div>
+        <div class="box">
+          <h3>Related tools</h3>
+          <dl style="font-size:12.5px;">
+            <dt style="width:100%;float:none;">AutoHotkey, PowerToys</dt>
+            <dd style="margin-left:0;">Use the same low-level hook mechanism for global key remapping.</dd>
+          </dl>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+
+  <footer>
+    <div class="wrap900">
+      <span>WinMediaDeck — MIT license.</span>
+      <span>No account, no telemetry, no installer required.</span>
+    </div>
+  </footer>
+
+</body>
+
+</html>

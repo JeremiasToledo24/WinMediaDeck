@@ -1,0 +1,13 @@
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/concurrency", "tests/invariants", "tests/integration"]
+pythonpath = ["."]
+
+[tool.pyrefly]
+search-path = ["."]
+disable-search-path-heuristics = true
+
+[tool.pyright]
+extraPaths = ["."]
+
+[tool.mypy]
+mypy_path = "."
