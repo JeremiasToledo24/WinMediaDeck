@@ -534,7 +534,8 @@
   <div class="topstrip">
     <div class="wrap">
       <span>WinMediaDeck 1.4.0 · Windows 10/11</span>
-      <a href="https://github.com/JeremiasToledo24/WinMediaDeck" target="_blank" rel="noopener">github.com/JeremiasToledo24/WinMediaDeck</a>
+      <a href="https://github.com/JeremiasToledo24/WinMediaDeck" target="_blank"
+        rel="noopener">github.com/JeremiasToledo24/WinMediaDeck</a>
     </div>
   </div>
 
@@ -574,35 +575,24 @@
           <a class="btn-download" href="#download" id="download">Download for Windows</a>
           <span class="cta-meta">MIT licensed · no admin rights required</span>
         </div>
-        <div class="statuslegend">
-          <span><span class="dot active"></span>active</span>
-          <span><span class="dot paused"></span>paused</span>
-          <span><span class="dot blocked"></span>blocked</span>
-          <span><span class="dot error"></span>error</span>
-          <span>— tray icon states, at a glance</span>
-        </div>
 
         <h2 id="features">What it remaps</h2>
         <div class="featlist">
           <div class="row">
             <div class="name">Media controls</div>
-            <div class="desc">Volume up/down, mute, play/pause, next, previous, stop — sent straight to whatever's
-              playing.</div>
+            <div class="desc">Volume up/down, mute, play/pause, next, previous, stop — sent straight to whatever's playing.</div>
           </div>
           <div class="row">
             <div class="name">System launchers</div>
-            <div class="desc">Open the calculator, your default browser, mail client, or the media selector, from a
-              single keypress.</div>
+            <div class="desc">Open the calculator, your default browser, mail client, or the media selector, from a single keypress.</div>
           </div>
           <div class="row">
             <div class="name">On-screen display</div>
-            <div class="desc">A brief, semi-transparent HUD confirms the action fired. Multi-monitor and DPI aware.
-            </div>
+            <div class="desc">A brief, semi-transparent HUD confirms the action fired. Multi-monitor and DPI aware.</div>
           </div>
           <div class="row">
             <div class="name">Hot-reload</div>
-            <div class="desc">Save <code>config.json</code> and the new mapping is live within 200ms. A broken config is
-              rejected, not applied.</div>
+            <div class="desc">Save <code>config.json</code> and the new mapping is live within 200ms. A broken config is rejected, not applied.</div>
           </div>
           <div class="row">
             <div class="name">Single instance</div>
@@ -610,14 +600,12 @@
           </div>
           <div class="row">
             <div class="name">Diagnostics</div>
-            <div class="desc"><code>--diagnostic</code> checks hook permissions, hotkey conflicts, and monitor setup
-              before you file a bug.</div>
+            <div class="desc"><code>--diagnostic</code> checks hook permissions, hotkey conflicts, and monitor setup before you file a bug.</div>
           </div>
         </div>
 
         <h2 id="config">Configuration</h2>
-        <p>Settings live at <code>%LOCALAPPDATA%\WinMediaDeck\config.json</code> and are created with sane defaults on
-          first run. Edit the file directly — there is no separate settings UI to keep in sync.</p>
+        <p>Settings live at <code>%LOCALAPPDATA%\WinMediaDeck\config.json</code> and are created with sane defaults on first run. Edit the file directly — there is no separate settings UI to keep in sync.</p>
 
         <pre><code>{
   "schema_version": 1,
@@ -668,36 +656,28 @@
           </tr>
         </table>
 
-        <div class="note">Config is validated against a strict schema on every reload. If validation fails, WinMediaDeck
-          keeps running on the last good configuration rather than falling back to an empty or partial one.</div>
+        <div class="note">Config is validated against a strict schema on every reload. If validation fails, WinMediaDeck keeps running on the last good configuration rather than falling back to an empty or partial one.</div>
 
         <h2 id="security">Security model</h2>
         <ul>
-          <li><strong>Closed action set.</strong> Only the actions listed above can ever run — no <code>eval()</code>,
-            no <code>exec()</code>, no shelling out to arbitrary commands.</li>
-          <li><strong>Strict schema validation.</strong> An invalid config is rejected outright; it is never
-            auto-corrected or partially applied.</li>
-          <li><strong>Scoped to F1–F12.</strong> The hook inspects only VK codes 0x70–0x7B. Every other key passes
-            through untouched and unread.</li>
-          <li><strong>Zero disk logs.</strong> <code>--debug</code> writes to stderr only; nothing is ever written to a
-            log file.</li>
+          <li><strong>Closed action set.</strong> Only the actions listed above can ever run — no <code>eval()</code>, no <code>exec()</code>, no shelling out to arbitrary commands.</li>
+          <li><strong>Strict schema validation.</strong> An invalid config is rejected outright; it is never auto-corrected or partially applied.</li>
+          <li><strong>Scoped to F1–F12.</strong> The hook inspects only VK codes 0x70–0x7B. Every other key passes through untouched and unread.</li>
+          <li><strong>Zero disk logs.</strong> <code>--debug</code> writes to stderr only; nothing is ever written to a log file.</li>
         </ul>
 
         <h3>Where things live</h3>
         <div class="architree">src/
-          ├── models/ data models — actions, events, states
-          ├── interfaces/ abstract contracts (IKeyboardHook, IMediaController, IOSDService)
-          ├── platform/windows/ Win32 ctypes isolation — keyboard, input, mutex, monitors, registry
-          ├── core/ action router, hotkey manager, media controller
-          ├── config/ settings + file-watcher
-          └── ui/ OSD overlay, system tray</div>
+├── models/             data models — actions, events, states
+├── interfaces/         abstract contracts (IKeyboardHook, IMediaController, IOSDService)
+├── platform/windows/   Win32 ctypes isolation — keyboard, input, mutex, monitors, registry
+├── core/               action router, hotkey manager, media controller
+├── config/             settings + file-watcher
+└── ui/                 OSD overlay, system tray</div>
 
         <h2 id="hooks">About the keyboard hook</h2>
-        <p>WinMediaDeck uses a Windows low-level keyboard hook (<code>WH_KEYBOARD_LL</code>) — the same mechanism
-          AutoHotkey and PowerToys use. Some antivirus engines flag any global hook by default; in this case, that flag
-          is a false positive.</p>
-        <p>The hook intercepts F1–F12 before the active application sees them and replaces them with media keys via
-          <code>SendInput</code>. There is no other way to remap keys system-wide on Windows.</p>
+        <p>WinMediaDeck uses a Windows low-level keyboard hook (<code>WH_KEYBOARD_LL</code>) — the same mechanism AutoHotkey and PowerToys use. Some antivirus engines flag any global hook by default; in this case, that flag is a false positive.</p>
+        <p>The hook intercepts F1–F12 before the active application sees them and replaces them with media keys via <code>SendInput</code>. There is no other way to remap keys system-wide on Windows.</p>
         <h3>What the hook does not do</h3>
         <ul class="nolist">
           <li>Record any keystrokes outside F1–F12</li>
@@ -747,6 +727,8 @@ python main.py</code></pre>
             <dd>None</dd>
             <dt>License</dt>
             <dd>MIT</dd>
+            <dt>Visits</dt>
+            <dd id="visit-count">—</dd>
           </dl>
         </div>
         <div class="box">
@@ -777,9 +759,31 @@ python main.py</code></pre>
   <footer>
     <div class="wrap900">
       <span>WinMediaDeck — MIT license.</span>
-      <span>No account, no telemetry, no installer required.</span>
+      <span>Visits: <span id="visit-count-footer">—</span> · No account, no telemetry, no installer required.</span>
     </div>
   </footer>
+
+  <script>
+    (function () {
+      fetch('https://countapi.mileshilliard.com/api/v1/hit/jeremiastoledo24_winmediadeck')
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data && typeof data.value !== 'undefined') {
+            var formatted = Number(data.value).toLocaleString();
+            var elAside = document.getElementById('visit-count');
+            var elFooter = document.getElementById('visit-count-footer');
+            if (elAside) elAside.textContent = formatted;
+            if (elFooter) elFooter.textContent = formatted;
+          }
+        })
+        .catch(function () {
+          var elAside = document.getElementById('visit-count');
+          var elFooter = document.getElementById('visit-count-footer');
+          if (elAside) elAside.textContent = '—';
+          if (elFooter) elFooter.textContent = '—';
+        });
+    })();
+  </script>
 
 </body>
 
